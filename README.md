@@ -6,24 +6,31 @@ TODO: Write a gem description
 
 Add this line to your application's Gemfile:
 
-    gem 'foreman_registration'
+    gem 'foreman_registration', :git => "ssh://git@radmind.sfu.ca/repo/foreman_registration.git"
 
-And then execute:
+After that you'll need to create the bundle for foreman, as foreman user run
+from the *FOREMAN_DIR*:
 
-    $ bundle
+
+    $ bundle --deploy
 
 Or install it yourself as:
 
     $ gem install foreman_registration
 
+## Foreman 1.1
+
+In order to work, the foreman application must be the following two lines commented out.
+
+config/routes.rb
+
+    # match '*a', :to => 'errors#routing'
+
+config/routes/v1.rb
+
+    # match '*other', :to => 'home#route_error'
+
+
 ## Usage
 
-TODO: Write usage instructions here
-
-## Contributing
-
-1. Fork it ( https://github.com/[my-github-username]/foreman_registration/fork )
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
+    $ curl -u admin:secret -H 'accept:application/json' http://0.0.0.0:3000/api/register
