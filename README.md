@@ -6,7 +6,7 @@ TODO: Write a gem description
 
 Add this line to your application's Gemfile:
 
-    gem 'foreman_registration', :git => "ssh://git@radmind.sfu.ca/repo/foreman_registration.git"
+    gem 'foreman_registration', :git => "https://github.com/sfu-rcg/foreman_registration.git"
 
 After that you'll need to create the bundle for foreman, as foreman user run
 from the *FOREMAN_DIR*:
