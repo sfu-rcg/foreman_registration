@@ -1,8 +1,12 @@
-# ForemanRegistration
+# foreman_registration
 
-TODO: Write a gem description
+A custom Foreman plugin used to Create/Register nodes. If the node already exists, simply call the CA Smart Proxy and revoke the existing certificate.
+
+Suitable for use in scripted registrations.
 
 ## Installation
+
+You must first define a `Puppet CA` Smart Proxy in Foreman. Then...
 
 Add this line to your application's Gemfile:
 
@@ -11,26 +15,25 @@ Add this line to your application's Gemfile:
 After that you'll need to create the bundle for foreman, as foreman user run
 from the *FOREMAN_DIR*:
 
+    bundle install
 
-    $ bundle --deploy
+Restart Foreman:
 
-Or install it yourself as:
-
-    $ gem install foreman_registration
-
-## Foreman 1.1
-
-In order to work, the foreman application must be the following two lines commented out.
-
-config/routes.rb
-
-    # match '*a', :to => 'errors#routing'
-
-config/routes/v1.rb
-
-    # match '*other', :to => 'home#route_error'
-
+    touch tmp/restart.txt
 
 ## Usage
 
-    $ curl -u admin:secret -H 'accept:application/json' http://0.0.0.0:3000/api/register
+All params are required, and it only accepts the following attributes:
+
+* name
+* certname
+* environment_id
+* hostgroup_id
+
+Example:
+
+    curl -H "Content-type:application/json" -XPOST -s -d '{ "name": "foo.bar.com", "certname": "foo.bar.com", "environment_id": "1", "hostgroup_id": 1}' -k -u user:pass "https://myforemaninstall.com/api/register"
+
+## Copyright
+
+2014 Simon Fraser University
