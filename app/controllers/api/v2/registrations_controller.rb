@@ -16,8 +16,16 @@ module Api
 
       FOREMAN_SMART_PROXY_CA_FEATURE = 'Puppet CA'
 
+      def environment_list
+        list_resource_names(Environment)
+      end
+
       def environment_id_by_name
         name_to_id(Environment)
+      end
+
+      def hostgroup_list
+        list_resource_names(Hostgroup)
       end
 
       def hostgroup_id_by_name
@@ -61,7 +69,7 @@ module Api
       #
       def register
         validated = validate_params params
-        @host      = Host::Managed.find_by_certname validated['certname']
+        @host     = Host::Managed.find_by_certname validated['certname']
         if @host # HAS A CERTNAME
           revoke_cert validated['certname']
         else
@@ -78,6 +86,12 @@ module Api
       end
 
       private
+
+        # Shared method for list methods
+        def list_resource_names(object)
+          names = object.pluck(:name).sort
+          render :json => names.to_json, :status => 200
+        end
 
         # Shared method for :name to :id lookups
         def name_to_id(object)
