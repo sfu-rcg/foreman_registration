@@ -16,15 +16,54 @@ module Api
 
       FOREMAN_SMART_PROXY_CA_FEATURE = 'Puppet CA'
 
-      # A registration implies node creation, unless it already exists, in
-      # which case it simply means we are redeploying so, revoke the cert.
+      ###############################################################
+      # Registration Logic:
+      ###############################################################
+      #
+      #### Inital Deployment
+      #
+      # Our deployment process implies pre-registration. In order for another
+      # admin to determine what config a machine receives, the node record
+      # must be created in Foreman prior to first Puppet run.
+      #
+      # If this is completed properly, when the Puppet agent runs for the
+      # first time, the registration will associate itself with the
+      # designated record, according to :name.
+      #
+      # If the :name cannot be found, a new record will be created using
+      # default specifications.
+      #
+      ##### Re-deployment
+      #
+      # If the machine already has a certname, it is not a new deployment, but
+      # re-deployment. Therefore, the only operation required is to revoke the
+      # existing certificate.
+      #
+      # So...
+      #
+      # 1. Look-up by certname: if it exists, just revoke the cert so that
+      # it can be re-generated and auto-signed during the first Puppet run.
+      #
+      # 2. Look-up by FQDN (name): If it's found, update the existing
+      # record's :certname attribute to match the one generated on the
+      # client, then revoke the existing cert.
+      #
+      # 3. Contingency: if there is no existing record to be found, create
+      # the record with the required parameters.
+      #
       def register
         validated = validate_params params
-        host      = Host::Managed.find_by_certname validated['certname']
-        if host
-          revoke_cert validated['certname'] if host['certname']
+        @host      = Host::Managed.find_by_certname validated['certname']
+        if @host # HAS A CERTNAME
+          revoke_cert validated['certname']
         else
-          create validated
+          @host = Host::Managed.find_by_name validated['name']
+          if @host # HAS A NODE RECORD
+            update validated
+            revoke_cert validated['certname']
+          else
+            create validated
+          end
         end
         register_success
         log("Node: #{validated['name']} | #{validated['certname']} registered successfully")
@@ -78,11 +117,21 @@ module Api
         # Create a new node record
         def create(attrs)
           begin
-            host = Host::Managed.new(attrs)
-            host.save
+            @host = Host::Managed.new(attrs)
+            @host.save
           rescue => err
             log "Exception #{err.class}: #{err.message}"
             raise Api::V2::RegistrationsControllerError.new "Could not create record. [#{err.message}]"
+          end
+        end
+
+        def update(attrs)
+          begin
+            @host.certname = attrs['certname']
+            @host.save
+          rescue => err
+            log "Exception #{err.class}: #{err.message}"
+            raise Api::V2::RegistrationsControllerError.new "Could not update record. [#{err.message}]"
           end
         end
 
