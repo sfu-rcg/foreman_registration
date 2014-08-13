@@ -1,7 +1,7 @@
 Rails.application.routes.draw do
 
   namespace :api, :defaults => {:format => 'json'} do
-    get 'register' => 'v2/registrations#register'
+    post 'register' => 'v2/registrations#register'
 
     scope "(:apiv)", :module => :v2,
                      :defaults => {:apiv => 'v2'},
@@ -10,7 +10,7 @@ Rails.application.routes.draw do
 
       resources :registrations, :only => [] do
         collection do
-          get 'register'
+          post 'register'
         end
       end
     end
