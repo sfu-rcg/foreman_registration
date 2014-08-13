@@ -17,17 +17,11 @@ module Api
       FOREMAN_SMART_PROXY_CA_FEATURE = 'Puppet CA'
 
       def environment_id_by_name
-        name = params[:name]
-        id  = Environment.find_by_name(name).id
-        map  = { :id => id }
-        render :json => map.to_json, :status => 200
+        name_to_id(Environment)
       end
 
       def hostgroup_id_by_name
-        name = params[:name]
-        id   = Hostgroup.find_by_name(name).id
-        map  = { :id => id }
-        render :json => map.to_json, :status => 200
+        name_to_id(Hostgroup)
       end
 
       ###############################################################
@@ -85,8 +79,13 @@ module Api
 
       private
 
-
-
+        # Shared method for :name to :id lookups
+        def name_to_id(object)
+          name   = params[:name]
+          result = object.find_by_name(name)
+          map    = { :id => result.nil? ? result : result.id }
+          render :json => map.to_json, :status => 200
+        end
 
         # Seatbelt: if you do not have a 'Puppet CA' Smart Proxy,
         # this method will fail ALL calls to #register and return 500
