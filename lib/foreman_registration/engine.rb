@@ -6,9 +6,16 @@ module ForemanRegistration
         requires_foreman '>= 1.5'
 
         security_block :foreman_registration do
-          permission :register_node, { 'api/v2/registrations' => [:register] }
+          permission :register_node, {
+            'api/v2/registrations' => [
+              :register,
+              :environment_list,
+              :environment_id_by_name,
+              :hostgroup_list,
+              :hostgroup_id_by_name,
+            ]
+          }
         end
-
         role "Registrar", [:register_node]
       end
     end
