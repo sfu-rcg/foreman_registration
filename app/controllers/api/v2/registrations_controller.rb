@@ -16,18 +16,22 @@ module Api
 
       FOREMAN_SMART_PROXY_CA_FEATURE = 'Puppet CA'
 
+      # Get a list of environment names
       def environment_list
         list_resource_names(Environment)
       end
 
+      # Lookup an environment :id by name
       def environment_id_by_name
         name_to_id(Environment)
       end
 
+      # Get a list of environment names
       def hostgroup_list
         list_resource_names(Hostgroup)
       end
 
+      # Lookup hostgroup :id by name
       def hostgroup_id_by_name
         name_to_id(Hostgroup)
       end
@@ -155,6 +159,7 @@ module Api
           end
         end
 
+        # Update reg operation
         def update(attrs)
           begin
             @host.certname = attrs['certname']
