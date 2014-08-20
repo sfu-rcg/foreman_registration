@@ -9,6 +9,7 @@ module ForemanRegistration
           permission :register_node, {
             'api/v2/registrations' => [
               :register,
+              :decommission,
               :environment_list,
               :environment_id_by_name,
               :hostgroup_list,
