@@ -72,7 +72,8 @@ module Api
       # the record with the required parameters.
       #
       def register
-        validated = validate_params params
+        required  = ['name', 'certname', 'environment_id', 'hostgroup_id']
+        validated = validate_params(params, required)
         @host     = Host::Managed.find_by_certname validated['certname']
         if @host # HAS A CERTNAME
           revoke_cert validated['certname']
@@ -85,8 +86,17 @@ module Api
             create validated
           end
         end
-        register_success
+        respond_success
         log("Node: #{validated['name']} | #{validated['certname']} registered successfully")
+      end
+
+      # Decomission a node
+      def decommission
+        required  = ['name']
+        validated = validate_params(params, required)
+        @host = Host::Managed.find_by_name validated['name']
+        destroy if @host
+        respond_success
       end
 
       private
@@ -126,7 +136,7 @@ module Api
         end
 
         # Standard success response 200
-        def register_success
+        def respond_success
           body = { :result  => true, :message => 'Success!' }
           render :json => body.to_json, :status => 200
         end
@@ -140,8 +150,7 @@ module Api
 
         # Ensure only valid params are accepted and that required params
         # are present
-        def validate_params(params)
-          required = ['name', 'certname', 'environment_id', 'hostgroup_id']
+        def validate_params(params, required)
           filtered = params.select { |k,v| required.include?(k) }
           unless filtered.keys.sort == required.sort
             raise ActiveModel::MissingAttributeError.new "You did not specify a required parameter: #{filtered}"
@@ -168,6 +177,17 @@ module Api
           rescue => err
             log "Exception #{err.class}: #{err.message}"
             raise Api::V2::RegistrationsControllerError.new "Could not update record. [#{err.message}]"
+          end
+        end
+
+        # Destroy the node record and cert
+        def destroy
+          begin
+            revoke_cert @host.certname if @host.certname
+            @host.destroy
+          rescue => err
+            log "Exception #{err.class}: #{err.message}"
+            raise Api::V2::RegistrationsControllerError.new "Could not destroy record. [#{err.message}]"
           end
         end
 
