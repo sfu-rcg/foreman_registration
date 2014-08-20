@@ -18,22 +18,22 @@ module Api
 
       # Get a list of environment names
       def environment_list
-        list_resource_names(Environment)
+        list_resources_by_attribute(Environment, :name)
       end
 
       # Lookup an environment :id by name
       def environment_id_by_name
-        name_to_id(Environment)
+        attribute_to_id(Environment, :name)
       end
 
       # Get a list of environment names
       def hostgroup_list
-        list_resource_names(Hostgroup)
+        list_resources_by_attribute(Hostgroup, :title)
       end
 
       # Lookup hostgroup :id by name
       def hostgroup_id_by_name
-        name_to_id(Hostgroup)
+        attribute_to_id(Hostgroup, :title)
       end
 
       ###############################################################
@@ -92,15 +92,16 @@ module Api
       private
 
         # Shared method for list methods
-        def list_resource_names(object)
-          names = object.pluck(:name).sort
-          render :json => names.to_json, :status => 200
+        def list_resources_by_attribute(object, attribute)
+          resources = object.pluck(attribute).sort
+          render :json => resources.to_json, :status => 200
         end
 
         # Shared method for :name to :id lookups
-        def name_to_id(object)
+        def attribute_to_id(object, attribute)
           name   = params[:name]
-          result = object.find_by_name(name)
+          method = 'find_by_' + attribute.to_s
+          result = object.send(method, name)
           map    = { :id => result.nil? ? result : result.id }
           render :json => map.to_json, :status => 200
         end
