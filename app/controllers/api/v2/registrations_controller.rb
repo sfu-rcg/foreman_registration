@@ -40,7 +40,7 @@ module Api
       # Registration Logic:
       ###############################################################
       #
-      #### Inital Deployment
+      #### Initial Deployment
       #
       # Our deployment process implies pre-registration. In order for another
       # admin to determine what config a machine receives, the node record
