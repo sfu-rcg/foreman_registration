@@ -90,13 +90,25 @@ module Api
         log("Node: #{validated['name']} | #{validated['certname']} registered successfully")
       end
 
+      ###############################################################
       # Decomission a node
+      ###############################################################
+      #
+      # This method is uber-primitive!
+      #
+      # It can take several minutes to delete a record, because of all the
+      # logs. We will eventually need to find a new methodology for this.
+      #
       def decommission
         required  = ['name']
         validated = validate_params(params, required)
         @host = Host::Managed.find_by_name validated['name']
-        destroy if @host
-        respond_success
+        if @host
+          destroy
+          respond_success
+        else
+         render :json => "Record not found".to_json, :status => 404
+        end
       end
 
       private
