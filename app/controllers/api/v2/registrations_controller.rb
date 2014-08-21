@@ -11,8 +11,8 @@ module Api
       unloadable
 
       before_filter :check_smart_proxy_ca
-      rescue_from ActiveModel::MissingAttributeError,    with: :register_error
-      rescue_from Api::V2::RegistrationsControllerError, with: :register_error
+      rescue_from ActiveModel::MissingAttributeError,    with: :respond_error
+      rescue_from Api::V2::RegistrationsControllerError, with: :respond_error
 
       FOREMAN_SMART_PROXY_CA_FEATURE = 'Puppet CA'
 
@@ -154,7 +154,7 @@ module Api
         end
 
         # Standard error response 500
-        def register_error(err)
+        def respond_error(err)
           body = { :result  => false, :message => err.message }
           log "Exception #{err.class}: #{err.message}"
           render :json => body.to_json, :status => 500
