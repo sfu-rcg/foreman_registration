@@ -167,7 +167,7 @@ module Api
           unless filtered.keys.sort == required.sort
             raise ActiveModel::MissingAttributeError.new "You did not specify a required parameter: #{filtered}"
           end
-          flitered['comment'] = params['comment'] if params['comment']
+          filtered['comment'] = params['comment'] if params['comment']
           filtered
         end
 
