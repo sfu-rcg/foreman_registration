@@ -168,7 +168,7 @@ module Api
             raise ActiveModel::MissingAttributeError.new "You did not specify a required parameter: #{filtered}"
           end
           filtered['comment'] = params['comment'] if params['comment']
-          filtered['certname'] ||= nil
+          filtered['certname'] ||= String.new
           filtered
         end
 
