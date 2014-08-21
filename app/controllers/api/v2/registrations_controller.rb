@@ -72,7 +72,7 @@ module Api
       # the record with the required parameters.
       #
       def register
-        required  = ['name', 'certname', 'environment_id', 'hostgroup_id']
+        required  = ['name', 'certname', 'environment_id', 'hostgroup_id', 'mac']
         validated = validate_params(params, required)
         @host     = Host::Managed.find_by_certname validated['certname']
         if @host # HAS A CERTNAME
@@ -167,6 +167,7 @@ module Api
           unless filtered.keys.sort == required.sort
             raise ActiveModel::MissingAttributeError.new "You did not specify a required parameter: #{filtered}"
           end
+          flitered['comment'] = params['comment'] if params['comment']
           filtered
         end
 
