@@ -74,7 +74,14 @@ module Api
       def register
         required  = ['name', 'environment_id', 'hostgroup_id', 'mac']
         validated = validate_params(params, required)
-        @host     = Host::Managed.find_by_certname validated['certname']
+
+        # A nil or empty certname value indicates a new registration
+        if validated['certname'].nil? or validated['certname'].empty?
+          @host = nil
+        else
+          @host = Host::Managed.find_by_certname validated['certname']
+        end
+
         if @host # HAS A CERTNAME
           revoke_cert validated['certname']
         else
@@ -167,16 +174,17 @@ module Api
           unless filtered.keys.sort == required.sort
             raise ActiveModel::MissingAttributeError.new "You did not specify a required parameter: #{filtered}"
           end
-          filtered['comment'] = params['comment'] if params['comment']
-          filtered['certname'] ||= String.new
+          filtered['comment']  = params['comment']  if params['comment']
+          filtered['certname'] = params['certname'] if params['certname']
           filtered
         end
 
         # Create a new node record
         def create(attrs)
           begin
+            log "Creating record: #{attrs['name']}"
             @host = Host::Managed.new(attrs)
-            @host.save
+            @host.save!
           rescue => err
             log "Exception #{err.class}: #{err.message}"
             raise Api::V2::RegistrationsControllerError.new "Could not create record. [#{err.message}]"
@@ -186,8 +194,9 @@ module Api
         # Update reg operation
         def update(attrs)
           begin
+            log "Updating certname for record: #{attrs['name']}"
             @host.certname = attrs['certname']
-            @host.save
+            @host.save!
           rescue => err
             log "Exception #{err.class}: #{err.message}"
             raise Api::V2::RegistrationsControllerError.new "Could not update record. [#{err.message}]"
@@ -197,7 +206,11 @@ module Api
         # Destroy the node record and cert
         def destroy
           begin
-            revoke_cert @host.certname if @host.certname
+            if @host.certname
+              log "Revoking certificate: #{@host.certname}"
+              revoke_cert @host.certname
+            end
+            log "Destroying record: #{@host.name}"
             @host.destroy
           rescue => err
             log "Exception #{err.class}: #{err.message}"
