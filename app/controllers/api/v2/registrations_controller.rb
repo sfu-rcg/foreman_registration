@@ -6,244 +6,230 @@ module Api
 
     class RegistrationsController < V2::BaseController
 
-      require 'faraday'
+      require 'foreman_registration'
+
+      include ForemanRegistration
 
       unloadable
 
-      before_filter :check_smart_proxy_ca
-      rescue_from ActiveModel::MissingAttributeError,    with: :respond_error
-      rescue_from Api::V2::RegistrationsControllerError, with: :respond_error
-
       FOREMAN_SMART_PROXY_CA_FEATURE = 'Puppet CA'
 
-      # Get a list of environment names
-      def environment_list
-        list_resources_by_attribute(Environment, :name)
+      # Skip auth callbacks and other security features for status lookups
+      skip_before_filter :require_login,        :only => :registration_status
+      skip_before_filter :authorize,            :only => :registration_status
+      skip_before_filter :set_taxonomy,         :only => :registration_status
+      skip_before_filter :session_expiry,       :only => :registration_status
+      skip_before_filter :update_activity_time, :only => :registration_status
+
+      before_filter :check_ip
+      before_filter :set_user
+      before_filter :check_user,  :only => [:hostgroups, :register, :reset, :decommission]
+      before_filter :find_node,   :only => [:reset, :decommission]
+      before_filter :check_node,  :only => [:reset, :decommission]
+      before_filter :extend_host, :only => [:reset, :decommission]
+      before_filter :check_auth,  :only => [:reset, :decommission]
+
+      rescue_from Api::V2::RegistrationsControllerError,
+        with: :respond_internal_error
+      rescue_from ActiveModel::MissingAttributeError,
+        with: :respond_internal_error
+
+      # ENVIRONMENTS
+      def environments
+        render_data_as_json Environment.all
       end
 
-      # Lookup an environment :id by name
-      def environment_id_by_name
-        attribute_to_id(Environment, :name)
+      # HOSTGROUPS
+      def hostgroups
+        render_data_as_json Hostgroup.authorized(:view_hostgroups)
       end
 
-      # Get a list of environment names
-      def hostgroup_list
-        list_resources_by_attribute(Hostgroup, :title)
-      end
-
-      # Lookup hostgroup :id by name
-      def hostgroup_id_by_name
-        attribute_to_id(Hostgroup, :title)
-      end
-
-      ###############################################################
-      # Registration Logic:
-      ###############################################################
-      #
-      #### Initial Deployment
-      #
-      # Our deployment process implies pre-registration. In order for another
-      # admin to determine what config a machine receives, the node record
-      # must be created in Foreman prior to first Puppet run.
-      #
-      # If this is completed properly, when the Puppet agent runs for the
-      # first time, the registration will associate itself with the
-      # designated record, according to :name.
-      #
-      # If the :name cannot be found, a new record will be created using
-      # default specifications.
-      #
-      ##### Re-deployment
-      #
-      # If the machine already has a certname, it is not a new deployment, but
-      # re-deployment. Therefore, the only operation required is to revoke the
-      # existing certificate.
-      #
-      # So...
-      #
-      # 1. Look-up by certname: if it exists, just revoke the cert so that
-      # it can be re-generated and auto-signed during the first Puppet run.
-      #
-      # 2. Look-up by FQDN (name): If it's found, update the existing
-      # record's :certname attribute to match the one generated on the
-      # client, then revoke the existing cert.
-      #
-      # 3. Contingency: if there is no existing record to be found, create
-      # the record with the required parameters.
-      #
+      # REGISTER
+      # - pre-creates node or updates an existing one
+      # - requires explicit call to #extend_host and #check_mac
       def register
-        required  = ['name', 'environment_id', 'hostgroup_id', 'mac']
-        validated = validate_params(params, required)
-
-        # A nil or empty certname value indicates a new registration
-        if validated['certname'].nil? or validated['certname'].empty?
-          @host = nil
-        else
-          @host = Host::Managed.find_by_certname validated['certname']
+        required  = ['name', 'environment_id', 'hostgroup_id', 'mac', 'certname']
+        validated = validate_params(required)
+        @host     = Host::Managed.new validated
+        msg, code = ["Registered node: #{@host.name} for user: #{@user.login}", 200]
+        begin
+          extend_host
+          check_mac
+          @host.save!
+        rescue ActiveRecord::RecordInvalid => e
+          msg, code = [e.message, 403]
         end
-
-        if @host # HAS A CERTNAME
-          revoke_cert validated['certname']
-        else
-          @host = Host::Managed.find_by_name validated['name']
-          if @host # HAS A NODE RECORD
-            update validated
-            revoke_cert validated['certname']
-          else
-            create validated
-          end
-        end
-        respond_success
-        log("Node: #{validated['name']} | #{validated['certname']} registered successfully")
+        respond_and_log msg, code
       end
 
-      ###############################################################
-      # Decomission a node
-      ###############################################################
-      #
-      # This method is uber-primitive!
-      #
-      # It can take several minutes to delete a record, because of all the
-      # logs. We will eventually need to find a new methodology for this.
-      #
+      # RESET
+      def reset
+        reset_or_decommission __method__
+      end
+
+      # DECOMMISSION
       def decommission
-        required  = ['name']
-        validated = validate_params(params, required)
-        @host = Host::Managed.find_by_name validated['name']
-        if @host
-          destroy
-          respond_success
+        reset_or_decommission __method__
+      end
+
+      # REGISTRATION STATUS
+      def registration_status
+        required  = ['certname']
+        validated = validate_params(required)
+        keys      = [:name, :last_report, :has_certificate?]
+        @host     = Host::Managed.find_by_certname validated['certname']
+        data = if @host
+          extend_host
+          keys.inject({}) { |memo, m| memo[m] = @host.send m; memo }
         else
-         render :json => "Record not found".to_json, :status => 404
+          Hash[keys.map {|x| [x, nil]}]
         end
+        render_data_as_json data
       end
 
       private
 
-        # Shared method for list methods
-        def list_resources_by_attribute(object, attribute)
-          resources = object.pluck(attribute).sort
-          render :json => resources.to_json, :status => 200
-        end
+      # Routine that resets or decommissions the node
+      # - this method is called by both operations
+      # - it does one or both depending on which method called it
+      def reset_or_decommission(method_name)
+        required  = ['name']
+        validated = validate_params(required)
+        @host.revoke
+        @host.destroy if method_name == :decommission
+        respond_and_log "Success: #{method_name} #{validated['name']}, #{validated['login']}", 200
+      end
 
-        # Shared method for :name to :id lookups
-        def attribute_to_id(object, attribute)
-          name   = params[:name]
-          method = 'find_by_' + attribute.to_s
-          result = object.send(method, name)
-          map    = { :id => result.nil? ? result : result.id }
-          render :json => map.to_json, :status => 200
-        end
+      def find_node
+        @host = Host::Managed.find_by_name params[:name]
+        extend_host
+      end
 
-        # Seatbelt: if you do not have a 'Puppet CA' Smart Proxy,
-        # this method will fail ALL calls to #register and return 500
-        # Called by the `before_filter`.
-        def check_smart_proxy_ca
-          @ca_api_path = '/puppet/ca'
-          @ca_proxies  = SmartProxy.joins(:features).where(:features =>
-            { :name => FOREMAN_SMART_PROXY_CA_FEATURE })
-          @ca_proxy    = @ca_proxies.first
-          unless @ca_proxy
-            raise Api::V2::RegistrationsControllerError.new "You must configure a `Puppet CA` Smart Proxy to use the Registration controller!"
+      def set_user
+        @user = User.current = User.find_by_login params[:login]
+      end
+
+      def check_user
+        respond_and_log "Unauthorized", 403 if @user.nil?
+      end
+
+      def check_mac
+        unless @host.mac_is_unique?
+          raise ActiveRecord::RecordInvalid.new @host
+        end
+      end
+
+      def check_node
+        respond_and_log "Resource not found", 404 if @host.nil?
+      end
+
+      def check_auth
+        respond_and_log "Unauthorized", 403 unless @host.authorized? :edit_hosts
+      end
+
+      def check_ip
+        client_ip   = request.remote_ip
+        allowed_ips = Setting.find_by_name(:foreman_registration_allowed_hosts).value
+        unless client_ip.member? allowed_ips
+          respond_and_log "Unauthorized [#{client_ip}]", 403
+        end
+      end
+
+      # Render the results of a query as JSON
+      def render_data_as_json(data, status=200)
+        render :json => data.to_json, :status => status
+      end
+
+      # Generic HTTP response method with Rails logging
+      def respond_and_log(msg, code=200, result=nil)
+        log(msg)
+        render_data_as_json({ :result => result, :message => msg }, code)
+      end
+
+      # Standard error response 500
+      def respond_internal_error(err)
+        respond_and_log(err.message, 500, false)
+      end
+
+      # Ensure only valid params are accepted and required params are present
+      def validate_params(required)
+        filtered = params.select do |k,v|
+          unless v.is_a? Fixnum or v.is_a? Float
+            next if v.nil? or v.empty?
           end
-          log("More than one `Puppet CA` defined!") if @ca_proxies.length > 1
+          required.include?(k)
         end
-
-        # Send a message to the Rails log
-        def log(msg)
-          Rails.logger.error "[RegistrationsController] #{msg}"
+        unless filtered.keys.sort == required.sort
+          raise ActiveModel::MissingAttributeError.new
+            "You did not specify a required parameter: #{filtered}"
         end
+        filtered['comment'] = params['comment'] if params['comment']
+        filtered
+      end
 
-        # Standard success response 200
-        def respond_success
-          body = { :result  => true, :message => 'Success!' }
-          render :json => body.to_json, :status => 200
-        end
+      # Insert custom methods into our @host instance
+      def extend_host
+        class << @host
 
-        # Standard error response 500
-        def respond_error(err)
-          body = { :result  => false, :message => err.message }
-          log "Exception #{err.class}: #{err.message}"
-          render :json => body.to_json, :status => 500
-        end
+          require 'uri'
+          require 'foreman_registration'
 
-        # Ensure only valid params are accepted and that required params
-        # are present
-        def validate_params(params, required)
-          filtered = params.select { |k,v| required.include?(k) }
-          unless filtered.keys.sort == required.sort
-            raise ActiveModel::MissingAttributeError.new "You did not specify a required parameter: #{filtered}"
+          include ForemanRegistration
+
+          # Get a list of Puppet CAs configured in Foreman
+          def get_ca_smart_proxy
+            SmartProxy.joins(:features).where(:features => {
+              :name => FOREMAN_SMART_PROXY_CA_FEATURE }).first
           end
-          filtered['comment']  = params['comment']  if params['comment']
-          filtered['certname'] = params['certname'] if params['certname']
-          filtered
-        end
 
-        # Create a new node record
-        def create(attrs)
-          begin
-            log "Creating record: #{attrs['name']}"
-            @host = Host::Managed.new(attrs)
-            @host.save!
-          rescue => err
-            log "Exception #{err.class}: #{err.message}"
-            raise Api::V2::RegistrationsControllerError.new "Could not create record. [#{err.message}]"
-          end
-        end
-
-        # Update reg operation
-        def update(attrs)
-          begin
-            log "Updating certname for record: #{attrs['name']}"
-            @host.certname = attrs['certname']
-            @host.save!
-          rescue => err
-            log "Exception #{err.class}: #{err.message}"
-            raise Api::V2::RegistrationsControllerError.new "Could not update record. [#{err.message}]"
-          end
-        end
-
-        # Destroy the node record and cert
-        def destroy
-          begin
-            if @host.certname
-              log "Revoking certificate: #{@host.certname}"
-              revoke_cert @host.certname
+          def get_ca_server
+            if proxy = get_ca_smart_proxy
+              URI(proxy.url)
+            else
+              raise Api::V2::RegistrationsControllerError.new
+                "Puppet CA Smart Proxy not configured."
             end
-            log "Destroying record: #{@host.name}"
-            @host.destroy
-          rescue => err
-            log "Exception #{err.class}: #{err.message}"
-            raise Api::V2::RegistrationsControllerError.new "Could not destroy record. [#{err.message}]"
           end
-        end
 
-        # Revoke a client certificate from the CA Smart Proxy
-        def revoke_cert(certname)
-          if @ca_proxy
-            conn = Faraday.new(:url => @ca_proxy.url, :ssl => {:verify => false}) do |faraday|
-              faraday.request  :url_encoded
-              faraday.adapter  Faraday.default_adapter
+          def ca_server_certificate_operation(op, resource)
+            if certname.nil? or certname.empty?
+              raise Api::V2::RegistrationsControllerError.new "Invalid certname: `#{certname}'"
             end
+            ForeignApiClient.new(get_ca_server).query op, resource
+          end
 
-            response = conn.delete do |request|
-              request.url [@ca_api_path, certname].join('/')
-              request.body = {}
-            end
+          def has_certificate?
+            resource = '/puppet/ca'
+            response = ca_server_certificate_operation(:get, resource)
+            JSON.parse(response.body)[certname].nil? ? false : true
+          end
 
+          # Revoke the client's certificate from the CA Smart Proxy
+          # - returns Faraday::Response obj
+          def revoke
+            resource  = ['/puppet/ca', certname].join('/')
+            response = ca_server_certificate_operation(:delete, resource)
             case response.status
-            when 200
-              true
-            when 404
+            when 200, 404
+              log "Puppet CA Response: #{response.status} #{response.body}"
               true
             else
-              status = response.env.response_headers['status']
-              raise Api::V2::RegistrationsControllerError.new "Error: response was \'#{status}\' while trying to revoke `#{certname}`"
+              raise Api::V2::RegistrationsControllerError.new
+                "#{ca_server}: returned #{response.status}, #{response.body}"
             end
-          else
-            raise Api::V2::RegistrationsControllerError.new "You must configure a `Puppet CA` Smart Proxy to use the Registration controller!"
           end
+
+          # Is the mac attribute unique?
+          def mac_is_unique?
+            if @duplicate_mac = Host::Managed.find_by_mac(mac)
+              self.errors.instance_variable_set(:@messages,
+                {:mac => ["not unique, [#{@duplicate_mac.name}]"]})
+            end
+            @duplicate_mac.nil?
+          end
+
         end
+      end
 
     end
   end
