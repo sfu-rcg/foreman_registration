@@ -16,7 +16,7 @@ module Api
 
       # Skip auth callbacks and other security features for status lookups
       skip_before_filter :require_login,        :only   => :registration_status
-      skip_before_filter :authorize,            :only   => :registration_status
+      skip_before_filter :authorize
       skip_before_filter :set_taxonomy,         :only   => :registration_status
       skip_before_filter :session_expiry,       :only   => :registration_status
       skip_before_filter :update_activity_time, :only   => :registration_status
