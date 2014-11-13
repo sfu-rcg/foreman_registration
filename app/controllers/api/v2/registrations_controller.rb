@@ -15,19 +15,20 @@ module Api
       FOREMAN_SMART_PROXY_CA_FEATURE = 'Puppet CA'
 
       # Skip auth callbacks and other security features for status lookups
-      skip_before_filter :require_login,        :only => :registration_status
-      skip_before_filter :authorize,            :only => :registration_status
-      skip_before_filter :set_taxonomy,         :only => :registration_status
-      skip_before_filter :session_expiry,       :only => :registration_status
-      skip_before_filter :update_activity_time, :only => :registration_status
+      skip_before_filter :require_login,        :only   => :registration_status
+      skip_before_filter :authorize,            :only   => :registration_status
+      skip_before_filter :set_taxonomy,         :only   => :registration_status
+      skip_before_filter :session_expiry,       :only   => :registration_status
+      skip_before_filter :update_activity_time, :only   => :registration_status
 
-      before_filter :check_ip
+      before_filter :check_ip,    :except => :registration_status
+
       before_filter :set_user
-      before_filter :check_user,  :only => [:hostgroups, :register, :reset, :decommission]
-      before_filter :find_node,   :only => [:reset, :decommission]
-      before_filter :check_node,  :only => [:reset, :decommission]
-      before_filter :extend_host, :only => [:reset, :decommission]
-      before_filter :check_auth,  :only => [:reset, :decommission]
+      before_filter :check_user,  :only   => [:hostgroups, :register, :reset, :decommission]
+      before_filter :find_node,   :only   => [:reset, :decommission]
+      before_filter :check_node,  :only   => [:reset, :decommission]
+      before_filter :extend_host, :only   => [:reset, :decommission]
+      before_filter :check_auth,  :only   => [:reset, :decommission]
 
       rescue_from Api::V2::RegistrationsControllerError,
         with: :respond_internal_error
