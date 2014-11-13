@@ -16,7 +16,7 @@ module Api
 
       # Skip auth callbacks and other security features for status lookups
       skip_before_filter :require_login,        :only   => :registration_status
-      skip_before_filter :authorize,            :only   => :registration_status
+      skip_before_filter :authorize
       skip_before_filter :set_taxonomy,         :only   => :registration_status
       skip_before_filter :session_expiry,       :only   => :registration_status
       skip_before_filter :update_activity_time, :only   => :registration_status
@@ -94,7 +94,7 @@ module Api
       # - this method is called by both operations
       # - it does one or both depending on which method called it
       def reset_or_decommission(method_name)
-        required  = ['name']
+        required  = ['name', 'login']
         validated = validate_params(required)
         @host.revoke
         @host.destroy if method_name == :decommission
