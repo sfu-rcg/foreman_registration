@@ -130,7 +130,7 @@ module Api
       def check_ip
         client_ip   = request.remote_ip
         allowed_ips = Setting.find_by_name(:foreman_registration_allowed_hosts).value
-        unless client_ip.member? allowed_ips
+        unless allowed_ips.member? client_ip
           respond_and_log "Unauthorized [#{client_ip}]", 403
         end
       end
