@@ -94,7 +94,7 @@ module Api
       # - this method is called by both operations
       # - it does one or both depending on which method called it
       def reset_or_decommission(method_name)
-        required  = ['name']
+        required  = ['name', 'login']
         validated = validate_params(required)
         @host.revoke
         @host.destroy if method_name == :decommission
