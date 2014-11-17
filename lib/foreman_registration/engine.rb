@@ -17,8 +17,8 @@ module ForemanRegistration
               :reset,
               :decommission,
               :registration_status,
-              :reg_environments,
-              :reg_hostgroups,
+              :environments,
+              :hostgroups,
             ]
           }
         end
