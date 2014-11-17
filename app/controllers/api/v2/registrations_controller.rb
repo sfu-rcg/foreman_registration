@@ -42,7 +42,17 @@ module Api
 
       # HOSTGROUPS
       def hostgroups
-        render_data_as_json Hostgroup.authorized(:view_hostgroups)
+        required  = ['login', 'environment_id']
+        validated = validate_params(required)
+        env  = Environment.find validated['environment_id']
+        data = if env
+          Hostgroup.all.select do |g|
+            g.environment.id == env.id and g.authorized?(:edit_hostgroups)
+          end
+        else
+          Hostgroup.authorized(:edit_hostgroups)
+        end
+        render_data_as_json data
       end
 
       # REGISTER
