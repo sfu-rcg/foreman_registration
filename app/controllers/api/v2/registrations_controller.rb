@@ -171,7 +171,8 @@ module Api
           required.include?(k)
         end
         unless filtered.keys.sort == required.sort
-          raise ActiveModel::MissingAttributeError.new "Required parameter missing: #{filtered}"
+          raise ActiveModel::MissingAttributeError.new(
+            "Required parameter missing: #{filtered}")
         end
         filtered['comment'] = params['comment'] if params['comment']
         filtered
@@ -196,14 +197,15 @@ module Api
             if proxy = get_ca_smart_proxy
               URI(proxy.url)
             else
-              raise Api::V2::RegistrationsControllerError.new
-                "Puppet CA Smart Proxy not configured."
+              raise Api::V2::RegistrationsControllerError.new(
+                "Puppet CA Smart Proxy not configured.")
             end
           end
 
           def ca_server_certificate_operation(op, resource)
             if certname.nil? or certname.empty?
-              raise Api::V2::RegistrationsControllerError.new "Invalid certname: `#{certname}'"
+              raise Api::V2::RegistrationsControllerError.new(
+                "Invalid certname: `#{certname}'")
             end
             ForeignApiClient.new(get_ca_server).query op, resource
           end
@@ -224,8 +226,8 @@ module Api
               log "Puppet CA Response: #{response.status} #{response.body}"
               true
             else
-              raise Api::V2::RegistrationsControllerError.new
-                "#{ca_server}: returned #{response.status}, #{response.body}"
+              raise Api::V2::RegistrationsControllerError.new(
+                "#{ca_server}: returned #{response.status}, #{response.body}")
             end
           end
 
