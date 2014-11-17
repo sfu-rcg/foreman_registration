@@ -171,8 +171,7 @@ module Api
           required.include?(k)
         end
         unless filtered.keys.sort == required.sort
-          raise ActiveModel::MissingAttributeError.new
-            "You did not specify a required parameter: #{filtered}"
+          raise ActiveModel::MissingAttributeError.new "Required parameter missing: #{filtered}"
         end
         filtered['comment'] = params['comment'] if params['comment']
         filtered
