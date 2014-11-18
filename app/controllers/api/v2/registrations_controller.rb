@@ -213,7 +213,10 @@ module Api
           def has_certificate?
             resource = '/puppet/ca'
             response = ca_server_certificate_operation(:get, resource)
-            JSON.parse(response.body)[certname].nil? ? false : true
+            if record = JSON.parse(response.body)[certname]
+              return record['state'].eql?('valid')
+            end
+            false
           end
 
           # Revoke the client's certificate from the CA Smart Proxy
