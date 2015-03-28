@@ -47,7 +47,7 @@ module Api
         env  = Environment.find validated['environment_id']
         data = if env
           Hostgroup.all.select do |g|
-            g.environment.id == env.id and g.authorized?(:edit_hostgroups)
+            g.environment == env and g.authorized?(:edit_hostgroups)
           end
         else
           Hostgroup.authorized(:edit_hostgroups)
