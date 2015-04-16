@@ -135,7 +135,7 @@ module Api
       end
 
       def check_auth
-        respond_and_log "Unauthorized", 403 unless @host.authorized? :edit_hosts
+        respond_and_log "Unauthorized", 403 unless @host.authorized? :view_hosts
       end
 
       def check_ip
